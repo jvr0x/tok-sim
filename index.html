@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tok-sim · Tokens/Second Simulator</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0e14; --panel:#0f1419; --panel-2:#141a22; --line:#1e2a36; --line-2:#2b3a4a;
+  --ink:#c5cdd8; --ink-dim:#5a6a7a; --ink-faint:#46545f;
+  --green:#00ff41; --green-dim:#00cc33; --cyan:#00d4ff; --white:#e8edf3;
+  --mono:'JetBrains Mono','Fira Code','Cascadia Code',ui-monospace,Menlo,Consolas,monospace;
+  --sans:var(--mono);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--mono);font-size:14px;line-height:1.6;
+  -webkit-font-smoothing:antialiased;padding:28px clamp(16px,4vw,48px) 64px}
+.scanline{position:fixed;inset:0;pointer-events:none;z-index:999;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.03) 2px,rgba(0,0,0,.03) 4px)}
+a{color:var(--green);text-decoration:none;transition:color .2s}
+a:hover{color:var(--cyan)}
+::selection{background:#00802080;color:var(--white)}
+.app{max-width:1400px;margin:0 auto;display:flex;flex-direction:column;gap:24px}
+.topbar{display:flex;justify-content:space-between;align-items:baseline;font-size:.85rem}
+.topbar .logo{color:var(--green);font-weight:700;font-size:1.1rem}
+.blink{animation:blink 1s step-end infinite}
+@keyframes blink{50%{opacity:0}}
+.topbar .back{color:var(--ink-dim);border-bottom:1px dashed var(--line);padding-bottom:2px}
+.topbar .back:hover{color:var(--green);border-color:var(--green)}
+.eyebrow{font-family:var(--mono);font-size:.85rem;color:var(--green);opacity:.8;margin-bottom:.6rem}
+h1{font-size:clamp(20px,3vw,28px);line-height:1.25;margin:6px 0 0;font-weight:700;text-wrap:balance;color:var(--white)}
+h1 .accent{color:var(--green)}
+.sub{color:var(--ink-dim);margin-top:8px}
+
+/* controls */
+.controls{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:16px}
+.ctrl-row{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end;justify-content:space-between}
+.ctrl-label{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:9px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font-family:var(--mono);font-size:12px;background:var(--panel-2);border:1px solid var(--line);color:var(--ink-dim);
+  border-radius:999px;padding:6px 12px 6px 9px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:border-color .15s,color .15s,opacity .15s}
+.chip:hover{border-color:var(--line-2)}
+.chip .dot{width:9px;height:9px;border-radius:3px;background:var(--sw);flex:none;box-shadow:0 0 0 1px rgba(0,0,0,.3) inset}
+.chip.off{opacity:.42}
+.chip.off .dot{background:var(--ink-faint)!important}
+.chip .tag{font-size:10px;padding:1px 5px;border-radius:4px;letter-spacing:.04em}
+.chip .m{background:rgba(0,204,51,.12);color:var(--good)}
+.chip .p{background:rgba(196,134,31,.14);color:var(--warn)}
+.chip:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+.chip .x{color:var(--ink-faint);margin-left:2px}
+.chip:hover .x{color:var(--sla)}
+.chip.selected{border-color:var(--green);color:var(--ink)}
+.chip.selected .dot{box-shadow:0 0 6px var(--green)}
+
+/* window mode toggle */
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{font-family:var(--mono);font-size:12px;background:transparent;color:var(--ink-dim);border:0;padding:7px 14px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--panel-2);color:var(--ink)}
+.seg button:focus-visible{outline:2px solid var(--green);outline-offset:-2px}
+
+/* rate control */
+.rate-group{display:flex;flex-direction:column;gap:6px}
+.rate-input{display:flex;align-items:center;gap:10px}
+.rate-input input[type=number]{font-family:var(--mono);font-size:14px;background:var(--panel-2);color:var(--green);
+  border:1px solid var(--line);border-radius:8px;padding:8px 12px;width:100px;text-align:center;font-weight:600}
+.rate-input input[type=number]:focus{outline:2px solid var(--green);outline-offset:2px;border-color:var(--green)}
+.rate-input label{font-family:var(--mono);font-size:12px;color:var(--ink-dim)}
+.rate-presets{display:flex;gap:6px}
+.rate-presets button{font-family:var(--mono);font-size:11px;background:none;border:1px solid var(--line);border-radius:4px;
+  color:var(--ink-dim);padding:4px 10px;cursor:pointer}
+.rate-presets button:hover{color:var(--green);border-color:var(--green)}
+
+/* target length */
+.target-group{display:flex;flex-direction:column;gap:6px}
+.target-input{display:flex;align-items:center;gap:10px}
+.target-input input[type=number]{font-family:var(--mono);font-size:14px;background:var(--panel-2);color:var(--ink);
+  border:1px solid var(--line);border-radius:8px;padding:8px 12px;width:100px;text-align:center;font-weight:600}
+.target-input input[type=number]:focus{outline:2px solid var(--green);outline-offset:2px;border-color:var(--green)}
+.target-input label{font-family:var(--mono);font-size:12px;color:var(--ink-dim)}
+
+/* generation window */
+.windows-container{display:flex;gap:18px;flex-direction:column}
+.windows-container.dual{flex-direction:row}
+.gen-window{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.window-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel-2)}
+.window-header .win-title{font-family:var(--mono);font-size:12px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:8px}
+.window-header .win-title .num{background:var(--green);color:var(--bg);border-radius:4px;padding:1px 7px;font-size:10px}
+.window-controls{display:flex;gap:12px;align-items:center}
+.window-controls select{font-family:var(--mono);font-size:11px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 8px}
+.window-controls .rate-sm{font-family:var(--mono);font-size:11px;color:var(--ink-dim)}
+.window-controls .rate-sm span{color:var(--green);font-weight:600}
+.window-body{padding:16px;min-height:280px;max-height:480px;overflow-y:auto;position:relative}
+.window-body .output{font-family:var(--mono);font-size:13px;line-height:1.7;white-space:pre-wrap;word-break:break-word;color:var(--ink)}
+.window-body .output .cursor{display:inline-block;width:8px;height:16px;background:var(--green);animation:blink 1s step-end infinite;vertical-align:text-bottom;margin-left:2px}
+.window-body .output .char{transition:color .05s}
+.window-body .output .char.visible{color:var(--ink)}
+.window-body .output .char.pending{color:var(--ink-faint)}
+.window-footer{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-top:1px solid var(--line);background:var(--panel-2);font-size:11px}
+.window-footer .stats{display:flex;gap:16px}
+.window-footer .stat{color:var(--ink-dim)}
+.window-footer .stat b{color:var(--green);font-weight:600}
+.window-footer .actions{display:flex;gap:8px}
+.btn{font-family:var(--mono);font-size:11px;background:none;border:1px solid var(--line);border-radius:6px;color:var(--ink-dim);
+  padding:5px 12px;cursor:pointer;transition:all .15s}
+.btn:hover{color:var(--green);border-color:var(--green)}
+.btn.primary{background:var(--green);color:var(--bg);border-color:var(--green);font-weight:600}
+.btn.primary:hover{background:var(--green-dim)}
+.btn.danger{border-color:var(--sla);color:var(--sla)}
+.btn.danger:hover{background:var(--sla);color:var(--bg)}
+@keyframes blink{50%{opacity:0}}
+
+/* style-specific text colors */
+.style-code .char.visible{color:var(--ink)}
+.style-math .char.visible{color:var(--cyan)}
+.style-prose .char.visible{color:var(--ink)}
+.style-markdown .char.visible{color:var(--ink)}
+.style-json .char.visible{color:var(--ink)}
+.style-shell .char.visible{color:var(--green-dim)}
+
+/* window style indicator */
+.style-badge{font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(0,255,65,.1);color:var(--green);letter-spacing:.04em}
+
+/* responsive */
+@media(min-width:900px){
+  .windows-container.dual{flex-direction:row}
+  .windows-container.dual .gen-window{flex:1}
+}
+.windows-container:not(.dual) .gen-window{width:100%}
+
+/* scrollbars */
+.window-body::-webkit-scrollbar{width:6px}
+.window-body::-webkit-scrollbar-track{background:var(--panel)}
+.window-body::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+.window-body::-webkit-scrollbar-thumb:hover{background:var(--line-2)}
+
+/* footer */
+footer{color:var(--ink-faint);font-size:12px;border-top:1px solid var(--line);padding-top:18px;display:flex;flex-direction:column;gap:6px}
+footer a{color:var(--ink-dim)}
+footer a:hover{color:var(--green)}
+</style>
+</head>
+<body>
+<div class="scanline"></div>
+<div class="app">
+  <!-- topbar -->
+  <div class="topbar">
+    <span class="logo">jvr0x<span class="blink">_</span></span>
+    <a class="back" href="https://jvr0x.github.io/">&larr; jvr0x.github.io</a>
+  </div>
+
+  <!-- header -->
+  <header>
+    <div class="eyebrow">$ tok-sim --help</div>
+    <h1>What does <span class="accent">X tokens/sec</span> actually look like?</h1>
+    <p class="sub">A visual simulator. Pick a text style, set a token rate, and watch characters stream out at the speed of your choice. Compare two side by side.</p>
+  </header>
+
+  <!-- global controls -->
+  <section class="controls">
+    <div>
+      <div class="ctrl-label">Text Style</div>
+      <div class="chips" id="style-picker"></div>
+    </div>
+    <div class="ctrl-row">
+      <div class="rate-group">
+        <div class="ctrl-label">Token Rate</div>
+        <div class="rate-input">
+          <input type="number" id="rate" value="20" min="1" max="500" step="1">
+          <label>tokens/sec</label>
+        </div>
+        <div class="rate-presets">
+          <button data-rate="5">5</button>
+          <button data-rate="10">10</button>
+          <button data-rate="20">20</button>
+          <button data-rate="50">50</button>
+          <button data-rate="100">100</button>
+          <button data-rate="200">200</button>
+        </div>
+      </div>
+      <div class="target-group">
+        <div class="ctrl-label">Target Tokens</div>
+        <div class="target-input">
+          <input type="number" id="target" value="200" min="10" max="5000" step="10">
+          <label>tokens</label>
+        </div>
+      </div>
+      <div>
+        <div class="ctrl-label">Window Mode</div>
+        <div class="seg" role="group" aria-label="Window mode">
+          <button id="win1" aria-pressed="true">1 Window</button>
+          <button id="win2" aria-pressed="false">2 Windows</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- generation windows -->
+  <div class="windows-container" id="windows-container">
+    <!-- Window 1 -->
+    <div class="gen-window" id="window-1">
+      <div class="window-header">
+        <span class="win-title"><span class="num">1</span> Generation Window</span>
+        <div class="window-controls">
+          <select class="win-style" data-win="1"></select>
+          <span class="style-badge" data-style-badge></span>
+        </div>
+      </div>
+      <div class="window-body">
+        <div class="output" id="output-1"><span class="cursor"></span></div>
+      </div>
+      <div class="window-footer">
+        <div class="stats">
+          <span class="stat">Tokens: <b id="tokens-1">0</b></span>
+          <span class="stat">Elapsed: <b id="elapsed-1">0.0s</b></span>
+          <span class="stat">Est. remaining: <b id="remaining-1">—</b></span>
+        </div>
+        <div class="actions">
+          <button class="btn primary" data-action="start" data-win="1">▶ Start</button>
+          <button class="btn danger" data-action="stop" data-win="1" disabled>■ Stop</button>
+          <button class="btn" data-action="reset" data-win="1">↺ Reset</button>
+        </div>
+      </div>
+    </div>
+    <!-- Window 2 (hidden by default) -->
+    <div class="gen-window hidden" id="window-2">
+      <div class="window-header">
+        <span class="win-title"><span class="num">2</span> Generation Window</span>
+        <div class="window-controls">
+          <select class="win-style" data-win="2"></select>
+          <span class="style-badge" data-style-badge></span>
+        </div>
+      </div>
+      <div class="window-body">
+        <div class="output" id="output-2"><span class="cursor"></span></div>
+      </div>
+      <div class="window-footer">
+        <div class="stats">
+          <span class="stat">Tokens: <b id="tokens-2">0</b></span>
+          <span class="stat">Elapsed: <b id="elapsed-2">0.0s</b></span>
+          <span class="stat">Est. remaining: <b id="remaining-2">—</b></span>
+        </div>
+        <div class="actions">
+          <button class="btn primary" data-action="start" data-win="2">▶ Start</button>
+          <button class="btn danger" data-action="stop" data-win="2" disabled>■ Stop</button>
+          <button class="btn" data-action="reset" data-win="2">↺ Reset</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- footer -->
+  <footer>
+    <div>tok-sim — Tokens/Second Visual Simulator. No real inference, just character approximation per style.</div>
+    <div>Source: <a href="https://github.com/jvr0x/tok-sim" target="_blank" rel="noopener">github.com/jvr0x/tok-sim</a></div>
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+/* ================================================================
+   TEXT CORPORA — representative text per style
+   Each style has multiple paragraphs/blocks for variety.
+   Token approximation: ~1 token ≈ 1.3 chars for prose, ~2.5 chars for code, etc.
+   ================================================================ */
+const STYLES = [
+  { id: "prose", label: "Prose", charPerToken: 1.3, color: "#00ff41" },
+  { id: "code", label: "Code", charPerToken: 2.5, color: "#00d4ff" },
+  { id: "math", label: "Math", charPerToken: 1.8, color: "#00d4ff" },
+  { id: "markdown", label: "Markdown", charPerToken: 1.4, color: "#c4861f" },
+  { id: "json", label: "JSON", charPerToken: 2.0, color: "#8b78f5" },
+  { id: "shell", label: "Shell", charPerToken: 2.2, color: "#d95c94" },
+];
+
+const CORPORA = {
+  prose: [
+    "The morning sun cast long shadows across the quiet village, painting the cobblestone streets in warm hues of amber and gold. Birds sang their familiar dawn chorus from the branches of ancient oak trees that lined the narrow lanes. Somewhere in the distance, a church bell tolled the hour, its deep resonant tones echoing through the misty valley.",
+    "She opened the old leather-bound book and the scent of aged paper and vanilla filled the air. The pages were yellowed with time, their edges softened by decades of careful handling. As she traced the embossed title on the cover with her fingertips, she felt a strange connection to all the readers who had come before her, each one lost in the same words, the same story, the same world.",
+    "The mountain stood sentinel over the valley, its snow-capped peak piercing the cloud layer like a sword aimed at the heavens. At its base, a glacier carved its slow inexorable path downward, grinding ancient rock into fine powder that fed the crystal-clear streams below. The air was thin and cold, carrying with it the faint scent of pine and the distant promise of an approaching storm.",
+    "In the heart of the city, a small garden thrived amid the concrete and steel. Wildflowers pushed through cracks in the pavement, their delicate petals a defiant celebration of life in an unforgiving environment. Bees buzzed from bloom to bloom, oblivious to the rumble of traffic just beyond the garden wall, and for a moment the chaos of urban existence faded into background noise.",
+    "The ocean stretched endlessly before them, its surface a shifting mosaic of blues and greens that changed with every passing cloud. Waves rolled onto the shore with a rhythmic persistence that seemed to measure time not in hours or minutes but in the eternal cadence of tide and current. The salt air carried the distant cry of gulls and the faint, indefinable scent of adventure.",
+  ],
+  code: [
+    "fn main() {\n    let mut numbers = vec![1, 2, 3, 4, 5];\n    let sum: i32 = numbers.iter()\n        .filter(|&&x| x % 2 == 0)\n        .sum();\n    println!(\"Even numbers sum: {}\", sum);\n    \n    for (i, num) in numbers.iter().enumerate() {\n        println!(\"[{}] {} -> {}\", i, num, num * num);\n    }\n}\n\nstruct Cache<K, V> {\n    capacity: usize,\n    map: HashMap<K, V>,\n    order: Vec<K>,\n}\n\nimpl<K: Hash + Eq, V> Cache<K, V> {\n    fn get(&mut self, key: &K) -> Option<&V> {\n        self.map.get(key)\n    }\n}",
+    "import numpy as np\nfrom typing import List, Tuple, Optional\n\nclass AttentionLayer:\n    \"\"\"Multi-head self-attention mechanism for transformer models.\"\"\"\n    \n    def __init__(self, d_model: int, n_heads: int, dropout: float = 0.1):\n        self.d_model = d_model\n        self.n_heads = n_heads\n        self.d_k = d_model // n_heads\n        self.w_q = nn.Linear(d_model, d_model)\n        self.w_k = nn.Linear(d_model, d_model)\n        self.w_v = nn.Linear(d_model, d_model)\n        self.w_o = nn.Linear(d_model, d_model)\n        self.dropout = nn.Dropout(dropout)\n    \n    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:\n        batch_size = x.size(0)\n        q = self.w_q(x).view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)\n        k = self.w_k(x).view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)\n        v = self.w_v(x).view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)\n        scores = torch.matmul(q, k.transpose(-2, -1)) / (self.d_k ** 0.5)\n        if mask is not None:\n            scores = scores.masked_fill(mask == 0, -1e9)\n        attn = torch.softmax(scores, dim=-1)\n        attn = self.dropout(attn)\n        return self.w_o(attn @ v)",
+    "class TreeNode:\n    def __init__(self, val=0, left=None, right=None):\n        self.val = val\n        self.left = left\n        self.right = right\n\ndef max_depth(root: Optional[TreeNode]) -> int:\n    if root is None:\n        return 0\n    return 1 + max(max_depth(root.left), max_depth(root.right))\n\ndef inorder_traversal(root: Optional[TreeNode]) -> List[int]:\n    result = []\n    stack = []\n    current = root\n    while current or stack:\n        while current:\n            stack.append(current)\n            current = current.left\n        current = stack.pop()\n        result.append(current.val)\n        current = current.right\n    return result",
+    "const express = require('express');\nconst app = express();\napp.use(express.json());\n\nconst users = new Map();\n\napp.get('/api/users', (req, res) => {\n  res.json(Array.from(users.values()));\n});\n\napp.post('/api/users', (req, res) => {\n  const { name, email } = req.body;\n  const id = crypto.randomUUID();\n  users.set(id, { id, name, email, createdAt: new Date().toISOString() });\n  res.status(201).json({ id, name, email });\n});\n\napp.delete('/api/users/:id', (req, res) => {\n  if (!users.delete(req.params.id)) {\n    return res.status(404).json({ error: 'User not found' });\n  }\n  res.status(204).send();\n});\n\nconst PORT = process.env.PORT || 3000;\napp.listen(PORT, () => console.log(`Server running on port ${PORT}`));",
+  ],
+  math: [
+    "∇ × E = -∂B/∂t\n∇ · D = ρ_f\n∇ · B = 0\n∇ × H = J_f + ∂D/∂t\n\nf(x) = ∫₀^∞ e^(-st) F(s) ds\nF(s) = L{f(t)} = ∫₀^∞ f(t)e^(-st) dt\n\n∂²u/∂t² = c²∇²u\n∇²φ = ∂²φ/∂x² + ∂²φ/∂y² + ∂²φ/∂z²\n\nP(A|B) = P(B|A) · P(A) / P(B)\nE[X] = Σ x_i · P(x_i)\nVar(X) = E[X²] - (E[X])²\n\nlim_{n→∞} (1 + 1/n)^n = e\n∫_{-∞}^{∞} e^(-x²) dx = √π\nΣ_{n=1}^{∞} 1/n² = π²/6",
+    "det(A) = Σ_{σ ∈ S_n} sgn(σ) · Π_{i=1}^{n} a_{i,σ(i)}\n\nA⁻¹ = (1/det(A)) · adj(A)\n\nλv = Av ⟹ det(A - λI) = 0\n\n‖x‖_p = (Σ |x_i|^p)^(1/p)\n‖T‖ = sup{‖Tx‖ : ‖x‖ ≤ 1}\n\n⟨f, g⟩ = ∫_a^b f(x)g(x) dx\n\n∮_C f(z)dz = 2πi · Σ Res(f, z_k)\n\n∇f = (∂f/∂x, ∂f/∂y, ∂f/∂z)\n∇²f = ∂²f/∂x² + ∂²f/∂y² + ∂²f/∂z²",
+    "S_n = a₁ + a₂ + ... + a_n = Σ_{i=1}^{n} a_i\n\na_n = a₁ + (n-1)d  (arithmetic)\na_n = a₁ · r^(n-1)  (geometric)\n\nlim_{n→∞} Σ_{i=1}^{n} (1/2^i) = 1\n\n∫ x^n dx = x^(n+1)/(n+1) + C\n∫ e^x dx = e^x + C\n∫ 1/x dx = ln|x| + C\n\nd/dx[sin(x)] = cos(x)\nd/dx[e^x] = e^x\nd/dx[ln(x)] = 1/x\n\nsin²(θ) + cos²(θ) = 1\ne^(iπ) + 1 = 0\n\nP(A ∪ B) = P(A) + P(B) - P(A ∩ B)",
+  ],
+  markdown: [
+    "# Project Documentation\n\n## Overview\nThis project implements a distributed task scheduler for batch processing pipelines. It supports **priority queues**, **retry logic**, and **horizontal scaling** across multiple worker nodes.\n\n## Installation\n\n```bash\nnpm install task-scheduler\n```\n\n## Usage\n\n```javascript\nimport { Scheduler } from 'task-scheduler';\n\nconst scheduler = new Scheduler({\n  concurrency: 5,\n  retryAttempts: 3,\n  backoff: 'exponential'\n});\n\nscheduler.addJob({\n  name: 'data-export',\n  priority: 'high',\n  payload: { format: 'csv', dateRange: '2024-01' }\n});\n```\n\n## Configuration\n\n| Setting | Default | Description |\n|---------|---------|-------------|\n| concurrency | 3 | Max parallel jobs |\n| timeout | 30000 | Job timeout in ms |\n| retry | 3 | Number of retry attempts |\n\n## License\nMIT © 2026",
+    "# API Reference\n\n## Endpoints\n\n### `GET /api/v1/resources`\n\nReturns a paginated list of resources.\n\n**Query Parameters:**\n\n- `page` (integer) — Page number (default: 1)\n- `limit` (integer) — Items per page (default: 20, max: 100)\n- `sort` (string) — Sort field (default: `created_at`)\n\n**Response:**\n\n```json\n{\n  \"data\": [...],\n  \"meta\": {\n    \"page\": 1,\n    \"total_pages\": 5,\n    \"total_items\": 97\n  }\n}\n```\n\n### `POST /api/v1/resources`\n\nCreates a new resource. Requires `Authorization: Bearer <token>`.\n\n> **Note:** The request body must include `name` and `type` fields.\n\n## Authentication\n\nAll endpoints require a JWT bearer token in the `Authorization` header.",
+  ],
+  json: [
+    '{\n  "project": "tok-sim",\n  "version": "1.0.0",\n  "description": "Tokens per second visual simulator",\n  "repository": "https://github.com/jvr0x/tok-sim",\n  "license": "MIT",\n  "config": {\n    "defaultRate": 20,\n    "maxRate": 500,\n    "styles": ["prose", "code", "math", "markdown", "json", "shell"],\n    "theme": {\n      "background": "#0a0e14",\n      "foreground": "#c5cdd8",\n      "accent": "#00ff41"\n    }\n  },\n  "dependencies": {\n    "runtime": "browser",\n    "external": []\n  },\n  "features": {\n    "singleWindow": true,\n    "dualWindow": true,\n    "stylePicker": true,\n    "rateControl": true,\n    "targetLength": true\n  }\n}',
+    '{\n  "session": {\n    "id": "sess_a1b2c3d4",\n    "created_at": "2026-07-17T10:30:00Z",\n    "status": "active",\n    "metadata": {\n      "user_agent": "Mozilla/5.0",\n      "ip_address": "192.168.1.1",\n      "region": "eu-west-1"\n    }\n  },\n  "metrics": {\n    "total_requests": 15847,\n    "avg_latency_ms": 42.3,\n    "p99_latency_ms": 187.5,\n    "error_rate": 0.0023,\n    "throughput": {\n      "requests_per_second": 340,\n      "bytes_per_second": 1048576\n    }\n  },\n  "endpoints": [\n    {\n      "path": "/api/v1/generate",\n      "method": "POST",\n      "hits": 8923,\n      "avg_time_ms": 55.2\n    },\n    {\n      "path": "/api/v1/status",\n      "method": "GET",\n      "hits": 6924,\n      "avg_time_ms": 3.1\n    }\n  ]\n}',
+    '{\n  "models": [\n    {\n      "name": "llama-3.1-8b",\n      "quantization": "NVFP4",\n      "parameters": 8000000000,\n      "context_length": 131072,\n      "benchmarks": {\n        "tokens_per_second": 36.4,\n        "ttft_p50_ms": 120,\n        "ttft_p95_ms": 210,\n        "max_concurrency": 128\n      }\n    },\n    {\n      "name": "qwen3.6-35b",\n      "quantization": "NVFP4",\n      "parameters": 35000000000,\n      "context_length": 131072,\n      "benchmarks": {\n        "tokens_per_second": 8.7,\n        "ttft_p50_ms": 280,\n        "ttft_p95_ms": 520,\n        "max_concurrency": 32\n      }\n    }\n  ]\n}',
+  ],
+  shell: [
+    "#!/bin/bash\nset -euo pipefail\n\n# Deploy script for tok-sim\nBRANCH=\"main\"\nDEPLOY_DIR=\"/var/www/tok-sim\"\n\n# Check prerequisites\ncommand -v git >/dev/null 2>&1 || { echo \"git required\"; exit 1; }\ncommand -v rsync >/dev/null 2>&1 || { echo \"rsync required\"; exit 1; }\n\n# Pull latest\ncd \"$(dirname \"$0\")/..\"\ngit fetch origin\ngit checkout \"$BRANCH\"\ngit pull origin \"$BRANCH\"\n\n# Build (if needed)\necho \"Building...\"\n# npm run build\n\n# Deploy\necho \"Deploying to $DEPLOY_DIR...\"\nrsync -avz --delete dist/ \"$DEPLOY_DIR/\" --chown=www-data:www-data\n\n# Reload nginx\nnginx -t && systemctl reload nginx\necho \"Deployment complete at $(date)\"",
+    "# System monitoring script\n#!/bin/bash\n\nTHRESHOLD_CPU=80\nTHRESHOLD_MEM=85\n\n# CPU usage\nCPU_USAGE=$(top -bn1 | grep \"Cpu(s)\" | awk '{print $2}')\necho \"CPU Usage: ${CPU_USAGE}%\"\n\n# Memory usage\nMEM_INFO=$(free | grep Mem)\nMEM_USED=$(echo \"$MEM_INFO\" | awk '{printf \"%.0f\", $3/$2 * 100}')\necho \"Memory Usage: ${MEM_USED}%\"\n\n# Disk usage\necho \"Disk Usage:\"\ndf -h | grep -E '^/dev/' | awk '{printf \"  %s: %s%%\\n\", $1, $5}'\n\n# Process check\nif (( $(echo \"$CPU_USAGE > $THRESHOLD_CPU\" | bc -l) )); then\n    echo \"WARNING: CPU usage above threshold!\" >&2\nfi\n\nif (( $(echo \"$MEM_USED > $THRESHOLD_MEM\" | bc -l) )); then\n    echo \"WARNING: Memory usage above threshold!\" >&2\nfi\n\n# Top 5 processes by CPU\necho \"\\nTop 5 CPU-consuming processes:\"\nps aux --sort=-%cpu | head -6",
+    "# Docker management commands\ndocker build -t tok-sim:latest -f Dockerfile .\ndocker run -d \\\n  --name tok-sim \\\n  -p 8080:80 \\\n  --restart unless-stopped \\\n  -e NODE_ENV=production \\\n  tok-sim:latest\n\n# Check container status\ndocker ps --filter name=tok-sim --format \"table {{.Names}}\\t{{.Status}}\\t{{.Ports}}\"\n\n# View logs\ndocker logs --tail 100 -f tok-sim\n\n# Cleanup\ndocker system prune -af --volumes\ndocker image prune -a -f --filter \"label!=maintained=true\"",
+  ],
+};
+
+/* ================================================================
+   STATE
+   ================================================================ */
+const state = {
+  mode: 1, // 1 or 2 windows
+  globalStyle: "prose",
+  globalRate: 20,
+  globalTarget: 200,
+  windows: {
+    1: { style: "prose", rate: 20, target: 200, running: false, stopped: false, tokensGenerated: 0, startTime: null, chars: [], timer: null, elapsedTimer: null },
+    2: { style: "code", rate: 50, target: 200, running: false, stopped: false, tokensGenerated: 0, startTime: null, chars: [], timer: null, elapsedTimer: null },
+  },
+};
+
+/* ================================================================
+   HELPERS
+   ================================================================ */
+function getStyleDef(id) { return STYLES.find(s => s.id === id) || STYLES[0]; }
+
+function generateText(styleId, tokenCount) {
+  const style = getStyleDef(styleId);
+  const chars = Math.round(tokenCount * style.charPerToken);
+  const corpus = CORPORA[styleId];
+  if (!corpus || corpus.length === 0) return " ".repeat(chars);
+  
+  // Build a string of approximately the right length
+  let result = "";
+  let idx = 0;
+  while (result.length < chars) {
+    const block = corpus[idx % corpus.length];
+    result += block + " ";
+    idx++;
+  }
+  return result.slice(0, chars);
+}
+
+function formatTime(seconds) {
+  if (seconds < 60) return seconds.toFixed(1) + "s";
+  const m = Math.floor(seconds / 60);
+  const s = (seconds % 60).toFixed(1);
+  return m + "m " + s + "s";
+}
+
+/* ================================================================
+   DOM REFERENCES
+   ================================================================ */
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+
+/* ================================================================
+   STYLE PICKER
+   ================================================================ */
+function buildStylePicker() {
+  const picker = $("#style-picker");
+  picker.innerHTML = STYLES.map(s =>
+    `<button class="chip ${s.id === state.globalStyle ? 'selected' : ''}" data-style="${s.id}" style="--sw:${s.color}">
+      <span class="dot"></span>${s.label}
+    </button>`
+  ).join("");
+  
+  picker.querySelectorAll(".chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      state.globalStyle = chip.dataset.style;
+      picker.querySelectorAll(".chip").forEach(c => c.classList.remove("selected"));
+      chip.classList.add("selected");
+      // Update window style selectors
+      updateWindowStyleSelectors();
+    });
+  });
+}
+
+function updateWindowStyleSelectors() {
+  [1, 2].forEach(winNum => {
+    const sel = $(`.win-style[data-win="${winNum}"]`);
+    if (!sel) return;
+    // If window has no selection yet, use global
+    if (!state.windows[winNum].style || sel.value === "") {
+      sel.value = state.globalStyle;
+      state.windows[winNum].style = state.globalStyle;
+    }
+  });
+}
+
+/* ================================================================
+   WINDOW STYLE SELECTORS
+   ================================================================ */
+function buildWindowStyleSelectors() {
+  [1, 2].forEach(winNum => {
+    const sel = $(`.win-style[data-win="${winNum}"]`);
+    if (!sel) return;
+    sel.innerHTML = STYLES.map(s =>
+      `<option value="${s.id}" ${s.id === state.windows[winNum].style ? 'selected' : ''}>${s.label}</option>`
+    ).join("");
+    
+    sel.addEventListener("change", () => {
+      state.windows[winNum].style = sel.value;
+      $(`#window-${winNum} .style-badge`).textContent = getStyleDef(sel.value).label;
+      $(`#window-${winNum} .window-body`).className = "window-body style-" + sel.value;
+    });
+  });
+}
+
+/* ================================================================
+   RATE CONTROLS
+   ================================================================ */
+function buildRateControls() {
+  const rateInput = $("#rate");
+  rateInput.value = state.globalRate;
+  rateInput.addEventListener("input", () => {
+    state.globalRate = Math.max(1, Math.min(500, parseInt(rateInput.value) || 1));
+  });
+  
+  $$(".rate-presets button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      state.globalRate = parseInt(btn.dataset.rate);
+      rateInput.value = state.globalRate;
+    });
+  });
+  
+  const targetInput = $("#target");
+  targetInput.value = state.globalTarget;
+  targetInput.addEventListener("input", () => {
+    state.globalTarget = Math.max(10, Math.min(5000, parseInt(targetInput.value) || 10));
+  });
+}
+
+/* ================================================================
+   WINDOW MODE TOGGLE
+   ================================================================ */
+function buildWindowModeToggle() {
+  $("#win1").addEventListener("click", () => setWindowMode(1));
+  $("#win2").addEventListener("click", () => setWindowMode(2));
+}
+
+function setWindowMode(mode) {
+  state.mode = mode;
+  $("#win1").setAttribute("aria-pressed", mode === 1);
+  $("#win2").setAttribute("aria-pressed", mode === 2);
+  const container = $("#windows-container");
+  container.classList.toggle("dual", mode === 2);
+  $("#window-2").classList.toggle("hidden", mode !== 2);
+}
+
+/* ================================================================
+   GENERATION ENGINE
+   ================================================================ */
+function startGeneration(winNum) {
+  const win = state.windows[winNum];
+  if (win.running) return;
+  
+  // If resetting (no chars yet or fully generated), regenerate
+  if (win.chars.length === 0 || win.tokensGenerated >= win.target) {
+    win.chars = generateText(win.style, win.target).split("");
+    win.tokensGenerated = 0;
+    win.startTime = null;
+  }
+  
+  win.running = true;
+  win.stopped = false;
+  win.startTime = win.startTime || Date.now();
+  
+  // UI updates
+  $(`#window-${winNum} .btn[data-action="start"]`).disabled = true;
+  $(`#window-${winNum} .btn[data-action="stop"]`).disabled = false;
+  $(`#window-${winNum} .btn[data-action="start"]`).textContent = "▶ Running";
+  
+  // Set style class on body
+  const body = $(`#window-${winNum} .window-body`);
+  body.className = "window-body style-" + win.style;
+  
+  // Render all characters (visible + pending)
+  renderOutput(winNum);
+  
+  // Schedule character reveals
+  const charsPerMs = win.rate / 1000; // chars per ms
+  let charIdx = win.tokensGenerated;
+  
+  function scheduleNext() {
+    if (!win.running || win.stopped || charIdx >= win.chars.length) {
+      stopGeneration(winNum);
+      return;
+    }
+    
+    // Reveal next character
+    win.tokensGenerated = charIdx + 1;
+    charIdx++;
+    
+    // Update UI
+    const charEls = $(`#output-${winNum}`).querySelectorAll(".char");
+    if (charEls[charIdx - 1]) {
+      charEls[charIdx - 1].classList.remove("pending");
+      charEls[charIdx - 1].classList.add("visible");
+    }
+    
+    // Scroll to bottom
+    const bodyEl = $(`#window-${winNum} .window-body`);
+    bodyEl.scrollTop = bodyEl.scrollHeight;
+    
+    // Update stats
+    updateStats(winNum);
+    
+    // Schedule next
+    const delay = 1 / charsPerMs;
+    win.timer = setTimeout(scheduleNext, delay);
+  }
+  
+  scheduleNext();
+  
+  // Update elapsed time every 100ms
+  win.elapsedTimer = setInterval(() => {
+    if (win.running && win.startTime) {
+      const elapsed = (Date.now() - win.startTime) / 1000;
+      $(`#elapsed-${winNum}`).textContent = formatTime(elapsed);
+      const remaining = Math.max(0, (win.target - win.tokensGenerated) / win.rate);
+      $(`#remaining-${winNum}`).textContent = formatTime(remaining);
+    }
+  }, 100);
+}
+
+function stopGeneration(winNum) {
+  const win = state.windows[winNum];
+  win.running = false;
+  if (win.timer) clearTimeout(win.timer);
+  if (win.elapsedTimer) clearInterval(win.elapsedTimer);
+  
+  // UI updates
+  $(`#window-${winNum} .btn[data-action="start"]`).disabled = false;
+  $(`#window-${winNum} .btn[data-action="start"]`).textContent = "▶ Start";
+  $(`#window-${winNum} .btn[data-action="stop"]`).disabled = true;
+  
+  if (win.stopped) {
+    $(`#remaining-${winNum}`).textContent = "paused";
+  }
+}
+
+function resetGeneration(winNum) {
+  const win = state.windows[winNum];
+  win.running = false;
+  win.stopped = false;
+  if (win.timer) clearTimeout(win.timer);
+  if (win.elapsedTimer) clearInterval(win.elapsedTimer);
+  win.tokensGenerated = 0;
+  win.startTime = null;
+  win.chars = [];
+  
+  // Clear output
+  const output = $(`#output-${winNum}`);
+  output.innerHTML = '<span class="cursor"></span>';
+  
+  // Update stats
+  $(`#tokens-${winNum}`).textContent = "0";
+  $(`#elapsed-${winNum}`).textContent = "0.0s";
+  $(`#remaining-${winNum}`).textContent = "—";
+  
+  // UI updates
+  $(`#window-${winNum} .btn[data-action="start"]`).disabled = false;
+  $(`#window-${winNum} .btn[data-action="start"]`).textContent = "▶ Start";
+  $(`#window-${winNum} .btn[data-action="stop"]`).disabled = true;
+}
+
+function renderOutput(winNum) {
+  const win = state.windows[winNum];
+  const output = $(`#output-${winNum}`);
+  
+  if (win.chars.length === 0) return;
+  
+  // Build HTML: all chars as spans, cursor at end
+  let html = "";
+  for (let i = 0; i < win.chars.length; i++) {
+    const visible = i < win.tokensGenerated;
+    html += `<span class="char ${visible ? 'visible' : 'pending'}">${win.chars[i].replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>`;
+  }
+  html += '<span class="cursor"></span>';
+  output.innerHTML = html;
+}
+
+function updateStats(winNum) {
+  const win = state.windows[winNum];
+  $(`#tokens-${winNum}`).textContent = win.tokensGenerated;
+}
+
+/* ================================================================
+   BUTTON HANDLERS
+   ================================================================ */
+function buildButtonHandlers() {
+  $$("[data-action]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const winNum = parseInt(btn.dataset.win);
+      const action = btn.dataset.action;
+      
+      if (action === "start") startGeneration(winNum);
+      else if (action === "stop") { state.windows[winNum].stopped = true; stopGeneration(winNum); }
+      else if (action === "reset") resetGeneration(winNum);
+    });
+  });
+}
+
+/* ================================================================
+   BOOT
+   ================================================================ */
+function boot() {
+  buildStylePicker();
+  buildWindowStyleSelectors();
+  buildRateControls();
+  buildWindowModeToggle();
+  buildButtonHandlers();
+  
+  // Initialize window 2 badge
+  if ($(`#window-2 .style-badge`)) {
+    $(`#window-2 .style-badge`).textContent = getStyleDef(state.windows[2].style).label;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", boot);
+</script>
+</body>
+</html>

@@ -318,7 +318,7 @@ const state = {
   globalRate: 20,
   globalTarget: 200,
   windows: {
-    1: { style: "prose", rate: 20, target: 200, running: false, stopped: false, tokensGenerated: 0, startTime: null, chars: [], timer: null, elapsedTimer: null },
+    1: { style: "code", rate: 20, target: 200, running: false, stopped: false, tokensGenerated: 0, startTime: null, chars: [], timer: null, elapsedTimer: null },
     2: { style: "code", rate: 50, target: 200, running: false, stopped: false, tokensGenerated: 0, startTime: null, chars: [], timer: null, elapsedTimer: null },
   },
 };
@@ -372,14 +372,17 @@ function buildStylePicker() {
   picker.querySelectorAll(".chip").forEach(chip => {
     chip.addEventListener("click", () => {
       const styleId = chip.dataset.style;
-      const index = parseInt(chip.dataset.index);
-      const winNum = state.compareMode ? (index + 1) : 1;
-      if (!state.windows[winNum]) return;
-      state.windows[winNum].style = styleId;
-      picker.querySelectorAll(".chip").forEach(c => {
-        const cIdx = parseInt(c.dataset.index);
-        const cWinNum = state.compareMode ? (cIdx + 1) : 1;
-        const isSelected = state.windows[cWinNum] && state.windows[cWinNum].style === STYLES[cIdx].id;
+      if (!state.compareMode) {
+        state.windows[1].style = styleId;
+      } else {
+        // Apply to both windows in compare mode
+        state.windows[1].style = styleId;
+        state.windows[2].style = styleId;
+      }
+      // Update chip selection states
+      picker.querySelectorAll(".chip").forEach((c, cIdx) => {
+        const cStyle = STYLES[cIdx].id;
+        const isSelected = state.windows[1].style === cStyle;
         c.classList.toggle("selected", isSelected);
       });
       updateStyleBadges();
@@ -509,9 +512,12 @@ function startGeneration(winNum) {
       charEls[charIdx - 1].classList.add("visible");
     }
     
-    // Scroll to bottom
+    // Scroll to follow generated text (only if user is near bottom)
     const bodyEl = $(`#window-${winNum} .window-body`);
-    bodyEl.scrollTop = bodyEl.scrollHeight;
+    const isNearBottom = bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight < 50;
+    if (isNearBottom) {
+      bodyEl.scrollTop = bodyEl.scrollHeight;
+    }
     
     // Update stats
     updateStats(winNum);

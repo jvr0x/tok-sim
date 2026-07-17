@@ -97,6 +97,7 @@ h1 .accent{color:var(--green)}
 .window-body .output .char{transition:color .05s}
 .window-body .output .char.visible{color:var(--ink)}
 .window-body .output .char.pending{color:var(--ink-faint)}
+.window-body.no-ghost .output .char.pending{color:transparent}
 .window-footer{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-top:1px solid var(--line);background:var(--panel-2);font-size:11px}
 .window-footer .stats{display:flex;gap:16px}
 .window-footer .stat{color:var(--ink-dim)}
@@ -193,6 +194,10 @@ footer a:hover{color:var(--green)}
       <div>
         <div class="ctrl-label">Compare</div>
         <button id="compare-toggle" class="btn" style="font-size:12px;padding:8px 16px">+ Compare speeds</button>
+      </div>
+      <div>
+        <div class="ctrl-label">Ghost Text</div>
+        <button id="ghost-toggle" class="btn" style="font-size:12px;padding:8px 16px">Off</button>
       </div>
     </div>
   </section>
@@ -314,6 +319,7 @@ const CORPORA = {
    ================================================================ */
 const state = {
   compareMode: false,
+  ghostText: false,
   globalStyle: "prose",
   globalRate: 20,
   globalTarget: 200,
@@ -444,6 +450,18 @@ function buildCompareToggle() {
     
     buildStylePicker();
     updateStyleBadges();
+  });
+}
+
+function buildGhostToggle() {
+  const btn = $("#ghost-toggle");
+  btn.addEventListener("click", () => {
+    state.ghostText = !state.ghostText;
+    btn.textContent = state.ghostText ? "On" : "Off";
+    btn.classList.toggle("primary", state.ghostText);
+    $$(".window-body").forEach(body => {
+      body.classList.toggle("no-ghost", !state.ghostText);
+    });
   });
 }
 
@@ -669,6 +687,7 @@ function boot() {
   buildStylePicker();
   buildRateControls();
   buildCompareToggle();
+  buildGhostToggle();
   buildUnifiedControls();
   
   // Initialize style badges

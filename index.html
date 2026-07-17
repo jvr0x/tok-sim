@@ -97,7 +97,7 @@ h1 .accent{color:var(--green)}
 .window-body .output .char{transition:color .05s}
 .window-body .output .char.visible{color:var(--ink)}
 .window-body .output .char.pending{color:var(--ink-faint)}
-.gen-window.no-ghost .output .char.pending{color:transparent !important}
+.gen-window.no-ghost .output .char.pending{display:none !important}
 .window-footer{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-top:1px solid var(--line);background:var(--panel-2);font-size:11px}
 .window-footer .stats{display:flex;gap:16px}
 .window-footer .stat{color:var(--ink-dim)}
@@ -452,13 +452,18 @@ function buildCompareToggle() {
 }
 
 function buildGhostToggle() {
-  const btn = $("#ghost-toggle");
+  const btn = document.getElementById("ghost-toggle");
   btn.addEventListener("click", () => {
     state.ghostText = !state.ghostText;
     btn.textContent = state.ghostText ? "On" : "Off";
     btn.classList.toggle("primary", state.ghostText);
-    $$(".gen-window").forEach(win => {
-      win.classList.toggle("no-ghost", !state.ghostText);
+    const windows = document.querySelectorAll(".gen-window");
+    windows.forEach(win => {
+      if (!state.ghostText) {
+        win.classList.add("no-ghost");
+      } else {
+        win.classList.remove("no-ghost");
+      }
     });
   });
 }
@@ -690,6 +695,9 @@ function boot() {
   
   // Initialize style badges
   updateStyleBadges();
+  
+  // Apply no-ghost class initially (ghost text off by default)
+  document.querySelectorAll(".gen-window").forEach(win => win.classList.add("no-ghost"));
 }
 
 document.addEventListener("DOMContentLoaded", boot);

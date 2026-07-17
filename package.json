@@ -1,0 +1,23 @@
+{
+  "name": "tok-sim",
+  "version": "1.0.0",
+  "description": "A visual simulator that shows what **X tokens/sec** actually looks like when generating text. Pick a style, set a rate, and watch characters stream out at the speed of your choice. Compare two side by side.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jvr0x/tok-sim.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jvr0x/tok-sim/issues"
+  },
+  "homepage": "https://github.com/jvr0x/tok-sim#readme",
+  "dependencies": {
+    "playwright": "^1.61.1"
+  }
+}

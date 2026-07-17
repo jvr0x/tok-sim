@@ -97,7 +97,7 @@ h1 .accent{color:var(--green)}
 .window-body .output .char{transition:color .05s}
 .window-body .output .char.visible{color:var(--ink)}
 .window-body .output .char.pending{color:var(--ink-faint)}
-.window-body.no-ghost .output .char.pending{color:transparent !important}
+.gen-window.no-ghost .output .char.pending{color:transparent !important}
 .window-footer{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-top:1px solid var(--line);background:var(--panel-2);font-size:11px}
 .window-footer .stats{display:flex;gap:16px}
 .window-footer .stat{color:var(--ink-dim)}
@@ -457,8 +457,8 @@ function buildGhostToggle() {
     state.ghostText = !state.ghostText;
     btn.textContent = state.ghostText ? "On" : "Off";
     btn.classList.toggle("primary", state.ghostText);
-    $$(".window-body").forEach(body => {
-      body.classList.toggle("no-ghost", !state.ghostText);
+    $$(".gen-window").forEach(win => {
+      win.classList.toggle("no-ghost", !state.ghostText);
     });
   });
 }

@@ -365,7 +365,7 @@ function buildStylePicker() {
   const picker = $("#style-picker");
   picker.innerHTML = STYLES.map((s, i) => {
     return `<button class="chip ${state.windows[i + 1] && state.windows[i + 1].style === s.id ? 'selected' : ''}" data-style="${s.id}" data-index="${i}" style="--sw:${s.color}">
-      <span class="dot"></span>${s.label}${state.compareMode ? `<span style="font-size:9px;color:var(--ink-faint);margin-left:2px">W${i + 1}</span>` : ''}
+      <span class="dot"></span>${s.label}
     </button>`;
   }).join("");
   

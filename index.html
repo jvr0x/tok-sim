@@ -90,10 +90,7 @@ h1 .accent{color:var(--green)}
 .window-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel-2)}
 .window-header .win-title{font-family:var(--mono);font-size:12px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:8px}
 .window-header .win-title .num{background:var(--green);color:var(--bg);border-radius:4px;padding:1px 7px;font-size:10px}
-.window-controls{display:flex;gap:12px;align-items:center}
-.window-controls select{font-family:var(--mono);font-size:11px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 8px}
-.window-controls .rate-sm{font-family:var(--mono);font-size:11px;color:var(--ink-dim)}
-.window-controls .rate-sm span{color:var(--green);font-weight:600}
+.window-controls{display:flex;gap:6px;align-items:center}
 .window-body{padding:16px;min-height:280px;max-height:480px;overflow-y:auto;position:relative}
 .window-body .output{font-family:var(--mono);font-size:13px;line-height:1.7;white-space:pre-wrap;word-break:break-word;color:var(--ink)}
 .window-body .output .cursor{display:inline-block;width:8px;height:16px;background:var(--green);animation:blink 1s step-end infinite;vertical-align:text-bottom;margin-left:2px}
@@ -138,6 +135,11 @@ h1 .accent{color:var(--green)}
 .window-body::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
 .window-body::-webkit-scrollbar-thumb:hover{background:var(--line-2)}
 
+.hidden{display:none}
+
+/* unified controls */
+.unified-controls{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+
 /* footer */
 footer{color:var(--ink-faint);font-size:12px;border-top:1px solid var(--line);padding-top:18px;display:flex;flex-direction:column;gap:6px}
 footer a{color:var(--ink-dim)}
@@ -174,12 +176,11 @@ footer a:hover{color:var(--green)}
           <label>tokens/sec</label>
         </div>
         <div class="rate-presets">
-          <button data-rate="5">5</button>
-          <button data-rate="10">10</button>
-          <button data-rate="20">20</button>
+          <button data-rate="15">15</button>
+          <button data-rate="30">30</button>
           <button data-rate="50">50</button>
+          <button data-rate="80">80</button>
           <button data-rate="100">100</button>
-          <button data-rate="200">200</button>
         </div>
       </div>
       <div class="target-group">
@@ -190,12 +191,18 @@ footer a:hover{color:var(--green)}
         </div>
       </div>
       <div>
-        <div class="ctrl-label">Window Mode</div>
-        <div class="seg" role="group" aria-label="Window mode">
-          <button id="win1" aria-pressed="true">1 Window</button>
-          <button id="win2" aria-pressed="false">2 Windows</button>
-        </div>
+        <div class="ctrl-label">Compare</div>
+        <button id="compare-toggle" class="btn" style="font-size:12px;padding:8px 16px">+ Compare speeds</button>
       </div>
+    </div>
+  </section>
+
+  <!-- unified controls -->
+  <section class="unified-controls" id="unified-controls">
+    <div style="display:flex;justify-content:center;gap:12px;align-items:center">
+      <button class="btn primary" id="unified-start" data-unified="start" style="padding:12px 40px;font-size:14px;font-weight:700">▶ Start</button>
+      <button class="btn danger" id="unified-stop" data-unified="stop" disabled style="padding:12px 40px;font-size:14px;font-weight:700">■ Stop</button>
+      <button class="btn" id="unified-reset" data-unified="reset" style="padding:12px 40px;font-size:14px;font-weight:700">↺ Reset</button>
     </div>
   </section>
 
@@ -206,7 +213,6 @@ footer a:hover{color:var(--green)}
       <div class="window-header">
         <span class="win-title"><span class="num">1</span> Generation Window</span>
         <div class="window-controls">
-          <select class="win-style" data-win="1"></select>
           <span class="style-badge" data-style-badge></span>
         </div>
       </div>
@@ -219,11 +225,6 @@ footer a:hover{color:var(--green)}
           <span class="stat">Elapsed: <b id="elapsed-1">0.0s</b></span>
           <span class="stat">Est. remaining: <b id="remaining-1">—</b></span>
         </div>
-        <div class="actions">
-          <button class="btn primary" data-action="start" data-win="1">▶ Start</button>
-          <button class="btn danger" data-action="stop" data-win="1" disabled>■ Stop</button>
-          <button class="btn" data-action="reset" data-win="1">↺ Reset</button>
-        </div>
       </div>
     </div>
     <!-- Window 2 (hidden by default) -->
@@ -231,8 +232,9 @@ footer a:hover{color:var(--green)}
       <div class="window-header">
         <span class="win-title"><span class="num">2</span> Generation Window</span>
         <div class="window-controls">
-          <select class="win-style" data-win="2"></select>
           <span class="style-badge" data-style-badge></span>
+          <input type="number" id="rate-2" value="50" min="1" max="500" step="1" style="font-family:var(--mono);font-size:11px;background:var(--panel-2);color:var(--green);border:1px solid var(--line);border-radius:4px;padding:3px 6px;width:60px;text-align:center;font-weight:600">
+          <label style="font-family:var(--mono);font-size:10px;color:var(--ink-dim)">t/s</label>
         </div>
       </div>
       <div class="window-body">
@@ -243,11 +245,6 @@ footer a:hover{color:var(--green)}
           <span class="stat">Tokens: <b id="tokens-2">0</b></span>
           <span class="stat">Elapsed: <b id="elapsed-2">0.0s</b></span>
           <span class="stat">Est. remaining: <b id="remaining-2">—</b></span>
-        </div>
-        <div class="actions">
-          <button class="btn primary" data-action="start" data-win="2">▶ Start</button>
-          <button class="btn danger" data-action="stop" data-win="2" disabled>■ Stop</button>
-          <button class="btn" data-action="reset" data-win="2">↺ Reset</button>
         </div>
       </div>
     </div>
@@ -316,7 +313,7 @@ const CORPORA = {
    STATE
    ================================================================ */
 const state = {
-  mode: 1, // 1 or 2 windows
+  compareMode: false,
   globalStyle: "prose",
   globalRate: 20,
   globalTarget: 200,
@@ -366,50 +363,26 @@ const $$ = (sel) => document.querySelectorAll(sel);
    ================================================================ */
 function buildStylePicker() {
   const picker = $("#style-picker");
-  picker.innerHTML = STYLES.map(s =>
-    `<button class="chip ${s.id === state.globalStyle ? 'selected' : ''}" data-style="${s.id}" style="--sw:${s.color}">
-      <span class="dot"></span>${s.label}
-    </button>`
-  ).join("");
+  picker.innerHTML = STYLES.map((s, i) => {
+    return `<button class="chip ${state.windows[i + 1] && state.windows[i + 1].style === s.id ? 'selected' : ''}" data-style="${s.id}" data-index="${i}" style="--sw:${s.color}">
+      <span class="dot"></span>${s.label}${state.compareMode ? `<span style="font-size:9px;color:var(--ink-faint);margin-left:2px">W${i + 1}</span>` : ''}
+    </button>`;
+  }).join("");
   
   picker.querySelectorAll(".chip").forEach(chip => {
     chip.addEventListener("click", () => {
-      state.globalStyle = chip.dataset.style;
-      picker.querySelectorAll(".chip").forEach(c => c.classList.remove("selected"));
-      chip.classList.add("selected");
-      // Update window style selectors
-      updateWindowStyleSelectors();
-    });
-  });
-}
-
-function updateWindowStyleSelectors() {
-  [1, 2].forEach(winNum => {
-    const sel = $(`.win-style[data-win="${winNum}"]`);
-    if (!sel) return;
-    // If window has no selection yet, use global
-    if (!state.windows[winNum].style || sel.value === "") {
-      sel.value = state.globalStyle;
-      state.windows[winNum].style = state.globalStyle;
-    }
-  });
-}
-
-/* ================================================================
-   WINDOW STYLE SELECTORS
-   ================================================================ */
-function buildWindowStyleSelectors() {
-  [1, 2].forEach(winNum => {
-    const sel = $(`.win-style[data-win="${winNum}"]`);
-    if (!sel) return;
-    sel.innerHTML = STYLES.map(s =>
-      `<option value="${s.id}" ${s.id === state.windows[winNum].style ? 'selected' : ''}>${s.label}</option>`
-    ).join("");
-    
-    sel.addEventListener("change", () => {
-      state.windows[winNum].style = sel.value;
-      $(`#window-${winNum} .style-badge`).textContent = getStyleDef(sel.value).label;
-      $(`#window-${winNum} .window-body`).className = "window-body style-" + sel.value;
+      const styleId = chip.dataset.style;
+      const index = parseInt(chip.dataset.index);
+      const winNum = state.compareMode ? (index + 1) : 1;
+      if (!state.windows[winNum]) return;
+      state.windows[winNum].style = styleId;
+      picker.querySelectorAll(".chip").forEach(c => {
+        const cIdx = parseInt(c.dataset.index);
+        const cWinNum = state.compareMode ? (cIdx + 1) : 1;
+        const isSelected = state.windows[cWinNum] && state.windows[cWinNum].style === STYLES[cIdx].id;
+        c.classList.toggle("selected", isSelected);
+      });
+      updateStyleBadges();
     });
   });
 }
@@ -422,11 +395,13 @@ function buildRateControls() {
   rateInput.value = state.globalRate;
   rateInput.addEventListener("input", () => {
     state.globalRate = Math.max(1, Math.min(500, parseInt(rateInput.value) || 1));
+    state.windows[1].rate = state.globalRate;
   });
   
   $$(".rate-presets button").forEach(btn => {
     btn.addEventListener("click", () => {
       state.globalRate = parseInt(btn.dataset.rate);
+      state.windows[1].rate = state.globalRate;
       rateInput.value = state.globalRate;
     });
   });
@@ -435,24 +410,53 @@ function buildRateControls() {
   targetInput.value = state.globalTarget;
   targetInput.addEventListener("input", () => {
     state.globalTarget = Math.max(10, Math.min(5000, parseInt(targetInput.value) || 10));
+    state.windows[1].target = state.globalTarget;
   });
 }
 
 /* ================================================================
    WINDOW MODE TOGGLE
    ================================================================ */
-function buildWindowModeToggle() {
-  $("#win1").addEventListener("click", () => setWindowMode(1));
-  $("#win2").addEventListener("click", () => setWindowMode(2));
+function buildCompareToggle() {
+  $("#compare-toggle").addEventListener("click", () => {
+    state.compareMode = !state.compareMode;
+    const btn = $("#compare-toggle");
+    const container = $("#windows-container");
+    const unified = $("#unified-controls");
+    const win2 = $("#window-2");
+    
+    if (state.compareMode) {
+      btn.textContent = "− Close compare";
+      btn.classList.add("primary");
+      container.classList.add("dual");
+      win2.classList.remove("hidden");
+      unified.classList.remove("hidden");
+    } else {
+      btn.textContent = "+ Compare speeds";
+      btn.classList.remove("primary");
+      container.classList.remove("dual");
+      win2.classList.add("hidden");
+      unified.classList.add("hidden");
+    }
+    
+    buildStylePicker();
+    updateStyleBadges();
+  });
 }
 
-function setWindowMode(mode) {
-  state.mode = mode;
-  $("#win1").setAttribute("aria-pressed", mode === 1);
-  $("#win2").setAttribute("aria-pressed", mode === 2);
-  const container = $("#windows-container");
-  container.classList.toggle("dual", mode === 2);
-  $("#window-2").classList.toggle("hidden", mode !== 2);
+function updateStyleBadges() {
+  [1, 2].forEach(winNum => {
+    const win = state.windows[winNum];
+    if (!win) return;
+    const badge = $(`#window-${winNum} .style-badge`);
+    if (badge) {
+      badge.textContent = getStyleDef(win.style).label;
+    }
+    const body = $(`#window-${winNum} .window-body`);
+    if (body) {
+      body.className = "window-body style-" + win.style;
+    }
+  });
 }
 
 /* ================================================================
@@ -473,10 +477,8 @@ function startGeneration(winNum) {
   win.stopped = false;
   win.startTime = win.startTime || Date.now();
   
-  // UI updates
-  $(`#window-${winNum} .btn[data-action="start"]`).disabled = true;
-  $(`#window-${winNum} .btn[data-action="stop"]`).disabled = false;
-  $(`#window-${winNum} .btn[data-action="start"]`).textContent = "▶ Running";
+  // Update unified control buttons
+  updateUnifiedButtons();
   
   // Set style class on body
   const body = $(`#window-${winNum} .window-body`);
@@ -486,7 +488,8 @@ function startGeneration(winNum) {
   renderOutput(winNum);
   
   // Schedule character reveals
-  const charsPerMs = win.rate / 1000; // chars per ms
+  const styleDef = getStyleDef(win.style);
+  const charsPerMs = (win.rate * styleDef.charPerToken) / 1000; // chars per ms based on token rate
   let charIdx = win.tokensGenerated;
   
   function scheduleNext() {
@@ -537,10 +540,8 @@ function stopGeneration(winNum) {
   if (win.timer) clearTimeout(win.timer);
   if (win.elapsedTimer) clearInterval(win.elapsedTimer);
   
-  // UI updates
-  $(`#window-${winNum} .btn[data-action="start"]`).disabled = false;
-  $(`#window-${winNum} .btn[data-action="start"]`).textContent = "▶ Start";
-  $(`#window-${winNum} .btn[data-action="stop"]`).disabled = true;
+  // Update unified control buttons
+  updateUnifiedButtons();
   
   if (win.stopped) {
     $(`#remaining-${winNum}`).textContent = "paused";
@@ -566,10 +567,8 @@ function resetGeneration(winNum) {
   $(`#elapsed-${winNum}`).textContent = "0.0s";
   $(`#remaining-${winNum}`).textContent = "—";
   
-  // UI updates
-  $(`#window-${winNum} .btn[data-action="start"]`).disabled = false;
-  $(`#window-${winNum} .btn[data-action="start"]`).textContent = "▶ Start";
-  $(`#window-${winNum} .btn[data-action="stop"]`).disabled = true;
+  // Update unified control buttons
+  updateUnifiedButtons();
 }
 
 function renderOutput(winNum) {
@@ -594,19 +593,64 @@ function updateStats(winNum) {
 }
 
 /* ================================================================
-   BUTTON HANDLERS
+   UNIFIED CONTROLS (compare mode)
    ================================================================ */
-function buildButtonHandlers() {
-  $$("[data-action]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const winNum = parseInt(btn.dataset.win);
-      const action = btn.dataset.action;
-      
-      if (action === "start") startGeneration(winNum);
-      else if (action === "stop") { state.windows[winNum].stopped = true; stopGeneration(winNum); }
-      else if (action === "reset") resetGeneration(winNum);
-    });
+function buildUnifiedControls() {
+  $("#unified-start").addEventListener("click", () => {
+    if (state.compareMode) {
+      startGeneration(1);
+      startGeneration(2);
+    } else {
+      startGeneration(1);
+    }
   });
+  
+  $("#unified-stop").addEventListener("click", () => {
+    if (state.compareMode) {
+      state.windows[1].stopped = true;
+      state.windows[2].stopped = true;
+      stopGeneration(1);
+      stopGeneration(2);
+    } else {
+      state.windows[1].stopped = true;
+      stopGeneration(1);
+    }
+  });
+  
+  $("#unified-reset").addEventListener("click", () => {
+    if (state.compareMode) {
+      resetGeneration(1);
+      resetGeneration(2);
+    } else {
+      resetGeneration(1);
+    }
+  });
+  
+  // Window 2 rate input
+  const rate2Input = $("#rate-2");
+  if (rate2Input) {
+    rate2Input.addEventListener("input", () => {
+      state.windows[2].rate = Math.max(1, Math.min(500, parseInt(rate2Input.value) || 1));
+    });
+  }
+}
+
+function updateUnifiedButtons() {
+  const w1 = state.windows[1];
+  const w2 = state.compareMode ? state.windows[2] : null;
+  const anyRunning = w1.running || (w2 && w2.running);
+  const startBtn = $("#unified-start");
+  const stopBtn = $("#unified-stop");
+  
+  if (anyRunning) {
+    startBtn.disabled = true;
+    startBtn.textContent = "▶ Running";
+    stopBtn.disabled = false;
+  } else {
+    startBtn.disabled = false;
+    startBtn.textContent = "▶ Start";
+    stopBtn.disabled = true;
+  }
 }
 
 /* ================================================================
@@ -614,15 +658,12 @@ function buildButtonHandlers() {
    ================================================================ */
 function boot() {
   buildStylePicker();
-  buildWindowStyleSelectors();
   buildRateControls();
-  buildWindowModeToggle();
-  buildButtonHandlers();
+  buildCompareToggle();
+  buildUnifiedControls();
   
-  // Initialize window 2 badge
-  if ($(`#window-2 .style-badge`)) {
-    $(`#window-2 .style-badge`).textContent = getStyleDef(state.windows[2].style).label;
-  }
+  // Initialize style badges
+  updateStyleBadges();
 }
 
 document.addEventListener("DOMContentLoaded", boot);

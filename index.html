@@ -259,6 +259,7 @@ footer a:hover{color:var(--green)}
   <footer>
     <div>tok-sim — Tokens/Second Visual Simulator. No real inference, just character approximation per style.</div>
     <div>Source: <a href="https://github.com/jvr0x/tok-sim" target="_blank" rel="noopener">github.com/jvr0x/tok-sim</a></div>
+    <div>Related: <a href="https://jvr0x.github.io/dgx-spark-bench/" target="_blank" rel="noopener">dgx-spark-bench</a> — real measured tokens/sec numbers on an NVIDIA DGX Spark, if you want to see what these rates look like on actual hardware.</div>
   </footer>
 </div>
 
@@ -320,12 +321,11 @@ const CORPORA = {
 const state = {
   compareMode: false,
   ghostText: false,
-  globalStyle: "prose",
   globalRate: 20,
   globalTarget: 200,
   windows: {
-    1: { style: "code", rate: 20, target: 200, running: false, stopped: false, tokensGenerated: 0, startTime: null, chars: [], timer: null, elapsedTimer: null },
-    2: { style: "code", rate: 50, target: 200, running: false, stopped: false, tokensGenerated: 0, startTime: null, chars: [], timer: null, elapsedTimer: null },
+    1: { style: "code", rate: 20, target: 200, running: false, stopped: false, tokensGenerated: 0, charIdx: 0, chars: [], charsTarget: 0, charEls: null, elapsedMs: 0, segmentStart: null, rateBaselineTokens: 0, rateBaselineElapsedMs: 0, rafId: null },
+    2: { style: "code", rate: 50, target: 200, running: false, stopped: false, tokensGenerated: 0, charIdx: 0, chars: [], charsTarget: 0, charEls: null, elapsedMs: 0, segmentStart: null, rateBaselineTokens: 0, rateBaselineElapsedMs: 0, rafId: null },
   },
 };
 
@@ -404,14 +404,14 @@ function buildRateControls() {
   rateInput.value = state.globalRate;
   rateInput.addEventListener("input", () => {
     state.globalRate = Math.max(1, Math.min(500, parseInt(rateInput.value) || 1));
-    state.windows[1].rate = state.globalRate;
+    rebaseRate(1, state.globalRate);
   });
-  
+
   $$(".rate-presets button").forEach(btn => {
     btn.addEventListener("click", () => {
       state.globalRate = parseInt(btn.dataset.rate);
-      state.windows[1].rate = state.globalRate;
       rateInput.value = state.globalRate;
+      rebaseRate(1, state.globalRate);
     });
   });
   
@@ -420,6 +420,7 @@ function buildRateControls() {
   targetInput.addEventListener("input", () => {
     state.globalTarget = Math.max(10, Math.min(5000, parseInt(targetInput.value) || 10));
     state.windows[1].target = state.globalTarget;
+    state.windows[2].target = state.globalTarget;
   });
 }
 
@@ -439,6 +440,11 @@ function buildCompareToggle() {
       btn.classList.add("primary");
       container.classList.add("dual");
       win2.classList.remove("hidden");
+      // Window 2 defaults to whatever style/target window 1 already has
+      // selected, so both windows render the same amount of text for the
+      // same token count instead of silently diverging.
+      state.windows[2].style = state.windows[1].style;
+      state.windows[2].target = state.windows[1].target;
     } else {
       btn.textContent = "+ Compare speeds";
       btn.classList.remove("primary");
@@ -485,93 +491,131 @@ function updateStyleBadges() {
 
 /* ================================================================
    GENERATION ENGINE
+
+   Reveal progress is driven by wall-clock time, not by a fixed-size
+   per-tick reveal on a recursive setTimeout. The previous design
+   recomputed the full token count from (charsRevealed / charsPerToken)
+   on every tick and re-queried the DOM for every single character —
+   at high rates (nested setTimeout gets clamped to a ~4ms floor by
+   the browser, plus per-char querySelectorAll) actual throughput
+   topped out around ~200 tok/s regardless of the configured rate.
+
+   Now each animation frame computes how many tokens SHOULD be visible
+   given elapsed time and the configured rate, and reveals exactly that
+   many characters in one batch against a cached element list. This
+   keeps the observed rate accurate up to very high configured rates,
+   and stays correct across pause/resume and mid-run rate changes.
    ================================================================ */
+function getElapsedMs(win) {
+  return win.elapsedMs + (win.running && win.segmentStart ? Date.now() - win.segmentStart : 0);
+}
+
+// Called whenever a rate input changes. If the window is mid-run, rebase
+// the token/time baseline to the current instant so the new rate applies
+// going forward only — otherwise the token count would jump discontinuously.
+function rebaseRate(winNum, newRate) {
+  const win = state.windows[winNum];
+  if (win.running) {
+    win.rateBaselineElapsedMs = getElapsedMs(win);
+    win.rateBaselineTokens = win.tokensGenerated;
+  }
+  win.rate = newRate;
+}
+
 function startGeneration(winNum) {
   const win = state.windows[winNum];
   if (win.running) return;
-  
-  // If resetting (no chars yet or fully generated), regenerate
-  if (win.chars.length === 0 || win.tokensGenerated >= win.target) {
+
+  if (win.rafId) cancelAnimationFrame(win.rafId);
+
+  // If resetting (no chars yet, fully generated, or target changed), regenerate
+  if (win.chars.length === 0 || win.tokensGenerated >= win.target || win.charsTarget !== win.target) {
     win.chars = generateText(win.style, win.target).split("");
     win.tokensGenerated = 0;
-    win.startTime = null;
+    win.charIdx = 0;
+    win.charsTarget = win.target;
+    win.elapsedMs = 0;
   }
-  
+
   win.running = true;
   win.stopped = false;
-  win.startTime = win.startTime || Date.now();
-  
-  // Update unified control buttons
+  win.segmentStart = Date.now();
+  win.rateBaselineTokens = win.tokensGenerated;
+  win.rateBaselineElapsedMs = win.elapsedMs;
+
   updateUnifiedButtons();
-  
+
   // Set style class on body
   const body = $(`#window-${winNum} .window-body`);
   body.className = "window-body style-" + win.style;
-  
-  // Render all characters (visible + pending)
+
+  // Render all characters (visible + pending) and cache the element list
   renderOutput(winNum);
-  
-  // Schedule token-based reveals
+
   const styleDef = getStyleDef(win.style);
-  const delayPerToken = 1000 / win.rate; // ms per token (rate is tokens/sec)
-  let charIdx = 0;
-  let tokensThisTick = 0;
-  
-  function scheduleNext() {
-    if (!win.running || win.stopped || win.tokensGenerated >= win.target || charIdx >= win.chars.length) {
+
+  function tick() {
+    if (!win.running) return;
+
+    const elapsedTotal = getElapsedMs(win);
+    const delayPerToken = 1000 / win.rate; // ms per token (rate is tokens/sec)
+    const tokensSinceBaseline = Math.max(0, Math.floor((elapsedTotal - win.rateBaselineElapsedMs) / delayPerToken));
+    const tokensNow = Math.min(win.target, win.rateBaselineTokens + tokensSinceBaseline);
+
+    if (tokensNow > win.tokensGenerated) {
+      win.tokensGenerated = tokensNow;
+      const charIdxTarget = Math.min(win.chars.length, Math.round(win.tokensGenerated * styleDef.charPerToken));
+      revealChars(winNum, charIdxTarget);
+    }
+
+    updateStats(winNum, elapsedTotal);
+
+    if (win.tokensGenerated >= win.target || win.charIdx >= win.chars.length) {
       stopGeneration(winNum);
       return;
     }
-    
-    // Reveal charPerToken characters per token tick
-    const charsToReveal = Math.round(styleDef.charPerToken);
-    for (let i = 0; i < charsToReveal && charIdx < win.chars.length; i++) {
-      const charEls = $(`#output-${winNum}`).querySelectorAll(".char");
-      if (charEls[charIdx]) {
-        charEls[charIdx].classList.remove("pending");
-        charEls[charIdx].classList.add("visible");
-      }
-      charIdx++;
-      tokensThisTick++;
-    }
-    
-    // Scroll to follow generated text (only if user is near bottom)
-    const bodyEl = $(`#window-${winNum} .window-body`);
-    const isNearBottom = bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight < 50;
-    if (isNearBottom) {
-      bodyEl.scrollTop = bodyEl.scrollHeight;
-    }
-    
-    // Update stats (tokensGenerated = number of token ticks completed)
-    win.tokensGenerated = Math.floor(charIdx / styleDef.charPerToken);
-    updateStats(winNum);
-    
-    // Schedule next token tick
-    win.timer = setTimeout(scheduleNext, delayPerToken);
+
+    win.rafId = requestAnimationFrame(tick);
   }
-  
-  scheduleNext();
-  
-  // Update elapsed time every 100ms
-  win.elapsedTimer = setInterval(() => {
-    if (win.running && win.startTime) {
-      const elapsed = (Date.now() - win.startTime) / 1000;
-      $(`#elapsed-${winNum}`).textContent = formatTime(elapsed);
-      const remaining = Math.max(0, (win.target - win.tokensGenerated) / win.rate);
-      $(`#remaining-${winNum}`).textContent = formatTime(remaining);
+
+  win.rafId = requestAnimationFrame(tick);
+}
+
+function revealChars(winNum, targetIdx) {
+  const win = state.windows[winNum];
+  if (!win.charEls) return;
+
+  for (let i = win.charIdx; i < targetIdx; i++) {
+    const el = win.charEls[i];
+    if (el) {
+      el.classList.remove("pending");
+      el.classList.add("visible");
     }
-  }, 100);
+  }
+  win.charIdx = targetIdx;
+
+  // Scroll to follow generated text (only if user is near bottom)
+  const bodyEl = $(`#window-${winNum} .window-body`);
+  const isNearBottom = bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight < 50;
+  if (isNearBottom) {
+    bodyEl.scrollTop = bodyEl.scrollHeight;
+  }
 }
 
 function stopGeneration(winNum) {
   const win = state.windows[winNum];
+  if (win.running && win.segmentStart) {
+    win.elapsedMs += Date.now() - win.segmentStart;
+  }
   win.running = false;
-  if (win.timer) clearTimeout(win.timer);
-  if (win.elapsedTimer) clearInterval(win.elapsedTimer);
-  
-  // Update unified control buttons
+  win.segmentStart = null;
+  if (win.rafId) {
+    cancelAnimationFrame(win.rafId);
+    win.rafId = null;
+  }
+
   updateUnifiedButtons();
-  
+
   if (win.stopped) {
     $(`#remaining-${winNum}`).textContent = "paused";
   }
@@ -579,24 +623,29 @@ function stopGeneration(winNum) {
 
 function resetGeneration(winNum) {
   const win = state.windows[winNum];
+  if (win.rafId) cancelAnimationFrame(win.rafId);
   win.running = false;
   win.stopped = false;
-  if (win.timer) clearTimeout(win.timer);
-  if (win.elapsedTimer) clearInterval(win.elapsedTimer);
+  win.rafId = null;
   win.tokensGenerated = 0;
-  win.charAccum = 0;
-  win.startTime = null;
+  win.charIdx = 0;
+  win.charsTarget = 0;
+  win.elapsedMs = 0;
+  win.segmentStart = null;
+  win.rateBaselineTokens = 0;
+  win.rateBaselineElapsedMs = 0;
   win.chars = [];
-  
+  win.charEls = null;
+
   // Clear output
   const output = $(`#output-${winNum}`);
   output.innerHTML = '<span class="cursor"></span>';
-  
+
   // Update stats
   $(`#tokens-${winNum}`).textContent = "0";
   $(`#elapsed-${winNum}`).textContent = "0.0s";
   $(`#remaining-${winNum}`).textContent = "—";
-  
+
   // Update unified control buttons
   updateUnifiedButtons();
 }
@@ -604,22 +653,31 @@ function resetGeneration(winNum) {
 function renderOutput(winNum) {
   const win = state.windows[winNum];
   const output = $(`#output-${winNum}`);
-  
+
   if (win.chars.length === 0) return;
-  
+
   // Build HTML: all chars as spans, cursor at end
   let html = "";
   for (let i = 0; i < win.chars.length; i++) {
-    const visible = i < win.tokensGenerated;
+    const visible = i < win.charIdx;
     html += `<span class="char ${visible ? 'visible' : 'pending'}">${win.chars[i].replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>`;
   }
   html += '<span class="cursor"></span>';
   output.innerHTML = html;
+
+  // Cache the char elements once so reveals don't re-query the DOM per char
+  win.charEls = Array.from(output.querySelectorAll(".char"));
 }
 
-function updateStats(winNum) {
+function updateStats(winNum, elapsedTotalMs) {
   const win = state.windows[winNum];
   $(`#tokens-${winNum}`).textContent = win.tokensGenerated;
+
+  const elapsedMs = elapsedTotalMs != null ? elapsedTotalMs : getElapsedMs(win);
+  $(`#elapsed-${winNum}`).textContent = formatTime(elapsedMs / 1000);
+
+  const remaining = win.tokensGenerated >= win.target ? 0 : (win.target - win.tokensGenerated) / win.rate;
+  $(`#remaining-${winNum}`).textContent = formatTime(remaining);
 }
 
 /* ================================================================
@@ -660,7 +718,8 @@ function buildUnifiedControls() {
   const rate2Input = $("#rate-2");
   if (rate2Input) {
     rate2Input.addEventListener("input", () => {
-      state.windows[2].rate = Math.max(1, Math.min(500, parseInt(rate2Input.value) || 1));
+      const newRate = Math.max(1, Math.min(500, parseInt(rate2Input.value) || 1));
+      rebaseRate(2, newRate);
     });
   }
 }

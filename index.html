@@ -318,8 +318,8 @@ const state = {
   globalRate: 20,
   globalTarget: 200,
   windows: {
-    1: { style: "code", rate: 20, target: 200, running: false, stopped: false, tokensGenerated: 0, charAccum: 0, startTime: null, chars: [], timer: null, elapsedTimer: null },
-    2: { style: "code", rate: 50, target: 200, running: false, stopped: false, tokensGenerated: 0, charAccum: 0, startTime: null, chars: [], timer: null, elapsedTimer: null },
+    1: { style: "code", rate: 20, target: 200, running: false, stopped: false, tokensGenerated: 0, startTime: null, chars: [], timer: null, elapsedTimer: null },
+    2: { style: "code", rate: 50, target: 200, running: false, stopped: false, tokensGenerated: 0, startTime: null, chars: [], timer: null, elapsedTimer: null },
   },
 };
 
@@ -473,7 +473,6 @@ function startGeneration(winNum) {
   if (win.chars.length === 0 || win.tokensGenerated >= win.target) {
     win.chars = generateText(win.style, win.target).split("");
     win.tokensGenerated = 0;
-    win.charAccum = 0;
     win.startTime = null;
   }
   
@@ -491,31 +490,28 @@ function startGeneration(winNum) {
   // Render all characters (visible + pending)
   renderOutput(winNum);
   
-  // Schedule character reveals
+  // Schedule token-based reveals
   const styleDef = getStyleDef(win.style);
-  const charsPerMs = (win.rate * styleDef.charPerToken) / 1000; // chars per ms based on token rate
-  let charIdx = win.tokensGenerated;
+  const delayPerToken = 1000 / win.rate; // ms per token (rate is tokens/sec)
+  let charIdx = 0;
+  let tokensThisTick = 0;
   
   function scheduleNext() {
-    if (!win.running || win.stopped || win.tokensGenerated >= win.target) {
+    if (!win.running || win.stopped || win.tokensGenerated >= win.target || charIdx >= win.chars.length) {
       stopGeneration(winNum);
       return;
     }
     
-    // Reveal next character and track tokens
-    win.tokensGenerated = charIdx + 1;
-    win.charAccum++;
-    if (win.charAccum >= styleDef.charPerToken) {
-      win.tokensGenerated++;
-      win.charAccum = 0;
-    }
-    charIdx++;
-    
-    // Update UI
-    const charEls = $(`#output-${winNum}`).querySelectorAll(".char");
-    if (charEls[charIdx - 1]) {
-      charEls[charIdx - 1].classList.remove("pending");
-      charEls[charIdx - 1].classList.add("visible");
+    // Reveal charPerToken characters per token tick
+    const charsToReveal = Math.round(styleDef.charPerToken);
+    for (let i = 0; i < charsToReveal && charIdx < win.chars.length; i++) {
+      const charEls = $(`#output-${winNum}`).querySelectorAll(".char");
+      if (charEls[charIdx]) {
+        charEls[charIdx].classList.remove("pending");
+        charEls[charIdx].classList.add("visible");
+      }
+      charIdx++;
+      tokensThisTick++;
     }
     
     // Scroll to follow generated text (only if user is near bottom)
@@ -525,12 +521,12 @@ function startGeneration(winNum) {
       bodyEl.scrollTop = bodyEl.scrollHeight;
     }
     
-    // Update stats
+    // Update stats (tokensGenerated = number of token ticks completed)
+    win.tokensGenerated = Math.floor(charIdx / styleDef.charPerToken);
     updateStats(winNum);
     
-    // Schedule next
-    const delay = 1 / charsPerMs;
-    win.timer = setTimeout(scheduleNext, delay);
+    // Schedule next token tick
+    win.timer = setTimeout(scheduleNext, delayPerToken);
   }
   
   scheduleNext();

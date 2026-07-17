@@ -97,7 +97,7 @@ h1 .accent{color:var(--green)}
 .window-body .output .char{transition:color .05s}
 .window-body .output .char.visible{color:var(--ink)}
 .window-body .output .char.pending{color:var(--ink-faint)}
-.window-body.no-ghost .output .char.pending{color:transparent}
+.window-body.no-ghost .output .char.pending{color:transparent !important}
 .window-footer{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-top:1px solid var(--line);background:var(--panel-2);font-size:11px}
 .window-footer .stats{display:flex;gap:16px}
 .window-footer .stat{color:var(--ink-dim)}
@@ -439,13 +439,11 @@ function buildCompareToggle() {
       btn.classList.add("primary");
       container.classList.add("dual");
       win2.classList.remove("hidden");
-      unified.classList.remove("hidden");
     } else {
       btn.textContent = "+ Compare speeds";
       btn.classList.remove("primary");
       container.classList.remove("dual");
       win2.classList.add("hidden");
-      unified.classList.add("hidden");
     }
     
     buildStylePicker();

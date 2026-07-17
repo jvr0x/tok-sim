@@ -318,8 +318,8 @@ const state = {
   globalRate: 20,
   globalTarget: 200,
   windows: {
-    1: { style: "code", rate: 20, target: 200, running: false, stopped: false, tokensGenerated: 0, startTime: null, chars: [], timer: null, elapsedTimer: null },
-    2: { style: "code", rate: 50, target: 200, running: false, stopped: false, tokensGenerated: 0, startTime: null, chars: [], timer: null, elapsedTimer: null },
+    1: { style: "code", rate: 20, target: 200, running: false, stopped: false, tokensGenerated: 0, charAccum: 0, startTime: null, chars: [], timer: null, elapsedTimer: null },
+    2: { style: "code", rate: 50, target: 200, running: false, stopped: false, tokensGenerated: 0, charAccum: 0, startTime: null, chars: [], timer: null, elapsedTimer: null },
   },
 };
 
@@ -473,6 +473,7 @@ function startGeneration(winNum) {
   if (win.chars.length === 0 || win.tokensGenerated >= win.target) {
     win.chars = generateText(win.style, win.target).split("");
     win.tokensGenerated = 0;
+    win.charAccum = 0;
     win.startTime = null;
   }
   
@@ -496,13 +497,18 @@ function startGeneration(winNum) {
   let charIdx = win.tokensGenerated;
   
   function scheduleNext() {
-    if (!win.running || win.stopped || charIdx >= win.chars.length) {
+    if (!win.running || win.stopped || win.tokensGenerated >= win.target) {
       stopGeneration(winNum);
       return;
     }
     
-    // Reveal next character
+    // Reveal next character and track tokens
     win.tokensGenerated = charIdx + 1;
+    win.charAccum++;
+    if (win.charAccum >= styleDef.charPerToken) {
+      win.tokensGenerated++;
+      win.charAccum = 0;
+    }
     charIdx++;
     
     // Update UI
@@ -561,6 +567,7 @@ function resetGeneration(winNum) {
   if (win.timer) clearTimeout(win.timer);
   if (win.elapsedTimer) clearInterval(win.elapsedTimer);
   win.tokensGenerated = 0;
+  win.charAccum = 0;
   win.startTime = null;
   win.chars = [];
   
